@@ -1,0 +1,2 @@
+# Satelliittiprojekti
+Hakkuiden tunnistaminen sentinel-satelliittidatasta
