@@ -4,8 +4,8 @@ from requests_oauthlib import OAuth2Session
 import json
 
 # Your client credentials
-client_id = '<your-client-id>'
-client_secret = '<your-client-secret>'
+client_id = '5876fc78-d265-47e0-9be3-480215b785fc'
+client_secret = 'Qv:+#co:JreWlDIJ:qkODt}9yyRIT+{#Gw3;Z-T7'
 
 # Create a session
 client = BackendApplicationClient(client_id=client_id)
@@ -29,6 +29,7 @@ function setup() {
         "B04",
         "B08",
         "SCL",
+        "CLM",
         "dataMask"
       ]
     }],
@@ -45,22 +46,22 @@ function setup() {
 }
 
 function evaluatePixel(samples) {
-    let ndvi = (samples.B08 - samples.B04)/(samples.B08 + samples.B04)
 
-    var validNDVIMask = 1
-    if (samples.B08 + samples.B04 == 0 ){
-        validNDVIMask = 0
-    }
-
+    let ndvi = -Math.log(0.371 + 1.5 * (samples.B08 - samples.B04) / (samples.B08 + samples.B04 + 0.5)) / 2.4
     var noWaterMask = 1
     if (samples.SCL == 6 ){
         noWaterMask = 0
     }
 
+    var noCloudMask = 1
+    if (samples.CLM == 1) {
+        noCloudMask = 0
+    }
+
     return {
         data: [ndvi],
         // Exclude nodata pixels, pixels where ndvi is not defined and water pixels from statistics:
-        dataMask: [samples.dataMask * validNDVIMask * noWaterMask]
+        dataMask: [samples.dataMask * noWaterMask * noCloudMask]
     }
 }
 """
@@ -69,10 +70,10 @@ stats_request = {
   "input": {
    "bounds": {
       "bbox": [
-        290230.910000,
-        624138.290000,
-        290276.820000,
-        624180.420000
+        614159.170708217, 
+        287855.644390796, 
+        614133.555587783, 
+        287802.108639204
         ],
     "properties": {
         "crs": "http://www.opengis.net/def/crs/EPSG/0/32633"
@@ -82,7 +83,7 @@ stats_request = {
       {
         "type": "sentinel-2-l2a",
         "dataFilter": {
-            "mosaickingOrder": "leastRecent"
+            "mosaickingOrder": "leastCC"
         }
       }
     ]
@@ -90,7 +91,7 @@ stats_request = {
   "aggregation": {
     "timeRange": {
             "from": "2018-01-01T00:00:00Z",
-            "to": "2021-01-01T00:00:00Z"
+            "to": "2023-08-21T00:00:00Z"
       },
     "aggregationInterval": {
         "of": "P10D"
@@ -111,5 +112,5 @@ response = oauth.request("POST", url=url , headers=headers, json=stats_request)
 sh_statistics = response.json()
 print(sh_statistics)
 
-with open('data10.json', 'w', encoding='utf-8') as f:
+with open('data45.json', 'w', encoding='utf-8') as f:
     json.dump(sh_statistics, f, ensure_ascii=False, indent=4)

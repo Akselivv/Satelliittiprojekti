@@ -1,0 +1,160 @@
+##### SKELETON SCRIPT #####
+setwd("//home.org.aalto.fi/valivia1/data/Documents/GitHub/Satelliittiprojekti")
+
+library(rjson)
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+library(strucchange)
+
+source("ChowDiscontinuityAlgorithm.R")
+
+  ## GIVE PARAMETERS ##
+
+    # CALCULATE COORDINATES#
+
+    source("20230824_satelliitti_koordinaattifunktio.R")
+    coordInputList <- calculateCoordinates("MKI_Etelä-Karjala_centroids.csv",
+                                           c(5, 100), c(2019, 2023), 1)
+  
+    # BUILD EVALSCRIPT #
+    
+    source("20230824_satelliitti_evalscriptBuilder.R") #WIP
+    evalscriptFromR <- evalscriptBuilder(method) #WIP 
+      
+  ## SOURCE PYTHON CODE WITH EVALSCRIPT AS INPUT ##
+
+  reticulate::source_python("20230822_satelliitti_APIcall.py")
+  
+  ## CLEAN DATA ##
+
+  data <- sh_statistics[1]
+  data <- data[[1]]
+  nobs <- length(data)
+  newdf <- data.frame(#from = numeric(nobs), 
+    to = numeric(nobs), min = numeric(nobs),
+    max = numeric(nobs), mean = numeric(nobs)#, stdev = numeric(nobs)
+  )
+  
+  data %<>% unlist()
+  
+  for (i in 1:nobs) {
+    #newdf$from[i] <- data[8*(i-1) + 1]
+    newdf$to[i] <- data[8*(i-1) + 2]
+    newdf$min[i] <- data[8*(i-1) + 3]
+    newdf$max[i] <- data[8*(i-1) + 4]
+    newdf$mean[i] <- data[8*(i-1) + 5]
+    #newdf$stdev[i] <- data[8*(i-1) + 6]
+  }
+  
+  print(newdf)
+  
+  ## ANALYSIS AND VISUALISATION ##
+  
+  getwd()
+  filename <- "data44.json"
+  hakkuuaika <- as.POSIXct("2019-06-15")
+  rajaaVuoteen <- FALSE
+  jatkuvuusanalyysi <- TRUE
+  pivot <- FALSE
+  
+  if (rajaaVuoteen) {
+    title <- "Hakkuun vaikutus normalisoituun kasvillisuusindeksiin: rajaus, vuosi"
+  } else {
+    title <- "Hakkuun vaikutus normalisoituun kasvillisuusindeksiin, ei aikarajausta"
+  }
+  
+  data <- fromJSON(file = filename)
+  data <- data[[1]]
+  nobs <- length(data)
+  newdf <- data.frame(#from = numeric(nobs), 
+    to = numeric(nobs), min = numeric(nobs),
+    max = numeric(nobs), mean = numeric(nobs)#, stdev = numeric(nobs)
+  )
+  
+  data %<>% unlist()
+  
+  for (i in 1:nobs) {
+    #newdf$from[i] <- data[8*(i-1) + 1]
+    newdf$to[i] <- data[8*(i-1) + 2]
+    newdf$min[i] <- data[8*(i-1) + 3]
+    newdf$max[i] <- data[8*(i-1) + 4]
+    newdf$mean[i] <- data[8*(i-1) + 5]
+    #newdf$stdev[i] <- data[8*(i-1) + 6]
+  }
+  
+  if (rajaaVuoteen) {
+    
+    newdf <- newdf %>%
+      filter(to > as.POSIXct(paste(as.character(format(hakkuuaika, format = "%Y")), "01", "01", sep = "-"))) %>%
+      filter(to < as.POSIXct(paste(as.character(format(hakkuuaika, format = "%Y")), "12", "31", sep = "-")))
+    
+  } 
+  
+  if (pivot) {
+    newdf <- newdf %>%
+      pivot_longer(!to, names_to = "critical_value", values_to = "NDVI_index")
+  } else if (!pivot) {
+    colnames(newdf)[4] <- "NDVI_index"
+  }
+  
+  newdf$NDVI_index %<>% as.numeric()
+  newdf$NDVI_index[is.infinite(newdf$NDVI_index)] <- NA
+  newdf$NDVI_index[is.nan(newdf$NDVI_index)] <- NA
+  newdf %<>% na.omit()
+  
+  newdf$hakkuu <- numeric(nrow(newdf))
+  
+  if (!jatkuvuusanalyysi) {
+    
+    ggplot(newdf, aes(x = as.POSIXct(to), y = as.numeric(NDVI_index), col = hakkuu)) + geom_point()
+    
+  } else if (jatkuvuusanalyysi) {
+    
+    newdf %>%
+      ungroup %>%
+      mutate(hakkuu = ifelse(newdf$to > as.POSIXct("2021-04-19"), "hakkuu", "ei hakkuuta")) %>% 
+      ggplot(aes(x = as.POSIXct(to), y = as.numeric(NDVI_index), 
+                 group=hakkuu, color=hakkuu)) +
+      geom_point() +
+      geom_smooth(method="lm") +
+      xlab("Päivämäärä") + 
+      ylab("NDVI-indeksi") + 
+      ggtitle(title)
+    
+  }
+  
+  Chowvec <- chowDiscontinuityAlgorithm(newdf)
+  
+  ggplot(data.frame(Chow_test = Chowvec, index = c(1:length(Chowvec))), aes(x = index, y = Chow_test)) + geom_point() + 
+    stat_smooth()
+  
+  ggplot(data.frame(Chow_diff = diff(Chowvec), index = c(1:length(diff(Chowvec)))), aes(x = index, y = Chow_diff)) + geom_point() + 
+    stat_smooth()
+  
+  #timedf <- data.frame(to = as.POSIXct(seq.POSIXt(as.POSIXct("2020-11-27"), as.POSIXct("2022-08-10"), by = "1 week")),
+  #                     NDVI_index = (sin(0.15*(1:length(seq.POSIXt(as.POSIXct("2020-11-27"), as.POSIXct("2022-08-10"), by = "1 week"))))))
+  
+  #Chowvec <- chowDiscontinuityAlgorithm(timedf)
+  
+  #ggplot(data.frame(Chow_test = Chowvec, index = c(1:length(Chowvec))), aes(x = index, y = Chow_test)) + geom_point()
+  #ggplot(timedf, aes(y = NDVI_index, x = to)) + geom_point()
+  
+  Chowdf <- data.frame(Chow_diff = diff(Chowvec), index = c(1:length(diff(Chowvec))))
+  
+  Chowdf$Chow_diff
+  plot(Chowdf$Chow_diff)
+  loess <- loess(Chow_diff ~ index, data = Chowdf)
+  plot(loess$fitted - Chowdf$Chow_diff)
+  
+  fs.ndvi <- Fstats(newdf$NDVI_index ~ 1)
+  plot(fs.ndvi)
+  bp.ndvi <- breakpoints(newdf$NDVI_index ~ 1)
+  
+  fm0 <- lm(newdf$NDVI_index ~ 1)
+  fm1 <- lm(newdf$NDVI_index ~ breakfactor(bp.ndvi, breaks = 1))
+  plot(newdf$NDVI_index)
+  lines(ts(fitted(fm0), start = 1), col = 3)
+  lines(ts(fitted(fm1), start = 1), col = 4)
+  lines(bp.ndvi)
+  
