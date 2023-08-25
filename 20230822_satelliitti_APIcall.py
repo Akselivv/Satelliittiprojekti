@@ -5,7 +5,7 @@ import json
 import os
 
 # Read client credentials
-os.chdir("//home.org.aalto.fi/valivia1/data/Documents/GitHub/Satelliittiprojekti")
+os.chdir(".~/GitHub/Satelliittiprojekti")
 with open("client_id_secret.txt", "r") as id_secret:
     lines = id_secret.readlines()
     print(lines)
