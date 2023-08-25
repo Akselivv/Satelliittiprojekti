@@ -1,11 +1,13 @@
 calculateCoordinates <- function(dataName, minMaxHectares, minMaxYears, indices) {
   
+  if (!exists("centroids_E_KA")) {
+    centroids_E_KA <<- read.csv(paste("data", dataName, sep= "/"))
+  }
+  
   print(dataName)
   print(minMaxHectares)
   print(minMaxYears)
   print(indices)
-  
-  centroids_E_KA <- read.csv(paste("data", dataName, sep= "/"))
   
   centroids <- centroids_E_KA
   
@@ -48,8 +50,11 @@ calculateCoordinates <- function(dataName, minMaxHectares, minMaxYears, indices)
   print(paste0(as.character(new_latitude_NE*10000), ", ", as.character(new_longitude_NE*10000)))
   print(paste0(as.character(new_latitude_SW*10000), ", ", as.character(new_longitude_SW*10000)))
   
-  coordInputList <- list(as.numeric(new_latitude_NE), as.numeric(new_longitude_NE),
-                       as.numeric(new_latitude_SW), as.numeric(new_longitude_SW))
+  coordInputList <- list(as.numeric(new_latitude_NE*10000), as.numeric(new_longitude_NE*10000),
+                       as.numeric(new_latitude_SW*10000), as.numeric(new_longitude_SW*10000))
+  
+  google_coordinates1 <<- paste0(new_latitude_NE, ", ", new_longitude_NE)
+  google_coordinates2 <<- paste0(new_latitude_SW, ", ", new_longitude_SW)
   
   arrivalDate <<- centroids$declarationarrivaldate[i]
   

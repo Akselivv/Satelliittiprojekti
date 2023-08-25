@@ -2,10 +2,23 @@ from oauthlib.oauth2 import BackendApplicationClient
 from requests_oauthlib import OAuth2Session
 
 import json
+import os
+
+# Read client credentials
+os.chdir("//home.org.aalto.fi/valivia1/data/Documents/GitHub/Satelliittiprojekti")
+with open("client_id_secret.txt", "r") as id_secret:
+    lines = id_secret.readlines()
+    print(lines)
+
+secrets = []
+
+for l in lines:
+    as_list = l.split(", ")
+    secrets.append(as_list[0].replace("\n", ""))
 
 # Your client credentials
-client_id = 'your-client-id'
-client_secret = 'your-client-secret'
+client_id = secrets[0]
+client_secret = secrets[1]
 
 # Create a session
 client = BackendApplicationClient(client_id=client_id)
@@ -20,61 +33,12 @@ resp = oauth.get("https://services.sentinel-hub.com/oauth/tokeninfo")
 print(resp.content)
 print(token)
 
-evalscript = """
-//VERSION=3
-function setup() {
-  return {
-    input: [{
-      bands: [
-        "B04",
-        "B08",
-        "SCL",
-        "CLM",
-        "dataMask"
-      ]
-    }],
-    output: [
-      {
-        id: "data",
-        bands: 1
-      },
-      {
-        id: "dataMask",
-        bands: 1
-      }]
-  }
-}
-
-function evaluatePixel(samples) {
-
-    let ndvi = -Math.log(0.371 + 1.5 * (samples.B08 - samples.B04) / (samples.B08 + samples.B04 + 0.5)) / 2.4
-    var noWaterMask = 1
-    if (samples.SCL == 6 ){
-        noWaterMask = 0
-    }
-
-    var noCloudMask = 1
-    if (samples.CLM == 1) {
-        noCloudMask = 0
-    }
-
-    return {
-        data: [ndvi],
-        // Exclude nodata pixels, pixels where ndvi is not defined and water pixels from statistics:
-        dataMask: [samples.dataMask * noWaterMask * noCloudMask]
-    }
-}
-"""
+evalscript = r.evalScriptFromR
 
 stats_request = {
   "input": {
    "bounds": {
-      "bbox": [
-        614159.170708217, 
-        287855.644390796, 
-        614133.555587783, 
-        287802.108639204
-        ],
+      "bbox": r.coordInputList,
     "properties": {
         "crs": "http://www.opengis.net/def/crs/EPSG/0/32633"
         }
@@ -111,3 +75,6 @@ url = "https://services.sentinel-hub.com/api/v1/statistics"
 response = oauth.request("POST", url=url , headers=headers, json=stats_request)
 sh_statistics = response.json()
 print(sh_statistics)
+
+#with open('data45.json', 'w', encoding='utf-8') as f:
+#    json.dump(sh_statistics, f, ensure_ascii=False, indent=4)

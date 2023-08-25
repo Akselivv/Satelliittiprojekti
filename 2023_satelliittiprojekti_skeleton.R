@@ -1,4 +1,14 @@
+# To run the program, only the 'method' part of the code should be changed.
+# Methods that seem to respond well to logging activity are PSRI, GNDVI, CRI1, NDVI, and GRVI1
+# Methods that respond slightly less well - but nevertheless could be useful - are
+# CHL_RE, S2REP, MCARI, NDVI_GREEN, CRI2, PSRI_NIR, IRECI, PSSR, and NDSI
+# All methods are ranked on a scale from * to *** (with ' corresponding to half a point)
+# On a text file in the project directory.
+
+# Good location indices to test include 211, 391, 631, 681
+
 ##### SKELETON SCRIPT #####
+
 setwd("//home.org.aalto.fi/valivia1/data/Documents/GitHub/Satelliittiprojekti")
 
 library(rjson)
@@ -7,28 +17,42 @@ library(magrittr)
 library(ggplot2)
 library(strucchange)
 
-source("ChowDiscontinuityAlgorithm.R")
+source("20230824_ChowDiscontinuityAlgorithm.R")
 
   ## GIVE PARAMETERS ##
+  # The list of allowed methods is given below
+  # list("CHL_RE", "S2REP", "MTCI", "PSRI", "MCARI", "GNDVI", "LAI_SAVI", "NDVI_GREEN",
+          #"MSAVI2", "CRI1", "CRI2, "GRVI1", "PSR_NIR", "IRECI", "PSSR", "NDSI", "NDI45",
+          #"ARI1", "ARI2", "EVI", "EVI2", "NDVI")
+
+    method <- "CRI1"
+    min_to_max_years <- c(2019, 2023)
+    min_to_max_hectares <- c(5, 100)
+    index <- 681
 
     # CALCULATE COORDINATES#
 
     source("20230824_satelliitti_koordinaattifunktio.R")
     coordInputList <- calculateCoordinates("MKI_Etelä-Karjala_centroids.csv",
-                                           c(5, 100), c(2019, 2023), 1)
+                                           min_to_max_hectares, min_to_max_years, index)
   
     # BUILD EVALSCRIPT #
     
-    source("20230824_satelliitti_evalscriptBuilder.R") #WIP
-    evalscriptFromR <- evalscriptBuilder(method) #WIP 
+    source("20230824_evalscriptBuilder.R")
+    evalscript <- build_evalscript(method)
       
   ## SOURCE PYTHON CODE WITH EVALSCRIPT AS INPUT ##
-
-  reticulate::source_python("20230822_satelliitti_APIcall.py")
+    
+  cacheEnv <- new.env()
+  options("reticulate.engine.environment" = cacheEnv)
   
+  assign("evalScriptFromR", evalscript, envir = cacheEnv)
+  assign("coordInputList", coordInputList, envir = cacheEnv)
+
+  reticulate::source_python("20230822_satelliitti_APIcall.py", envir = cacheEnv)
   ## CLEAN DATA ##
 
-  data <- sh_statistics[1]
+  data <- reticulate::py$sh_statistics[1]
   data <- data[[1]]
   nobs <- length(data)
   newdf <- data.frame(#from = numeric(nobs), 
@@ -51,36 +75,17 @@ source("ChowDiscontinuityAlgorithm.R")
   
   ## ANALYSIS AND VISUALISATION ##
   
-  getwd()
-  filename <- "data44.json"
+  #getwd()
+  #filename <- "data44.json"
   hakkuuaika <- as.POSIXct("2019-06-15")
   rajaaVuoteen <- FALSE
   jatkuvuusanalyysi <- TRUE
   pivot <- FALSE
   
   if (rajaaVuoteen) {
-    title <- "Hakkuun vaikutus normalisoituun kasvillisuusindeksiin: rajaus, vuosi"
+    title <- paste0("Hakkuun vaikutus ", method, "-indeksiin: rajaus, vuosi")
   } else {
-    title <- "Hakkuun vaikutus normalisoituun kasvillisuusindeksiin, ei aikarajausta"
-  }
-  
-  data <- fromJSON(file = filename)
-  data <- data[[1]]
-  nobs <- length(data)
-  newdf <- data.frame(#from = numeric(nobs), 
-    to = numeric(nobs), min = numeric(nobs),
-    max = numeric(nobs), mean = numeric(nobs)#, stdev = numeric(nobs)
-  )
-  
-  data %<>% unlist()
-  
-  for (i in 1:nobs) {
-    #newdf$from[i] <- data[8*(i-1) + 1]
-    newdf$to[i] <- data[8*(i-1) + 2]
-    newdf$min[i] <- data[8*(i-1) + 3]
-    newdf$max[i] <- data[8*(i-1) + 4]
-    newdf$mean[i] <- data[8*(i-1) + 5]
-    #newdf$stdev[i] <- data[8*(i-1) + 6]
+    title <- paste0("Hakkuun vaikutus ", method, "-indeksiin")
   }
   
   if (rajaaVuoteen) {
@@ -101,9 +106,19 @@ source("ChowDiscontinuityAlgorithm.R")
   newdf$NDVI_index %<>% as.numeric()
   newdf$NDVI_index[is.infinite(newdf$NDVI_index)] <- NA
   newdf$NDVI_index[is.nan(newdf$NDVI_index)] <- NA
+  newdf$NDVI_index %<>% as.numeric()
   newdf %<>% na.omit()
   
   newdf$hakkuu <- numeric(nrow(newdf))
+  
+  # Winsorize data
+  for (i in 1:nrow(newdf)) {
+    if (newdf$NDVI_index[i] > 10*mean(newdf$NDVI_index[-i], na.rm = TRUE)) {
+      newdf$NDVI_index[i] <- NA
+    } 
+  }
+  
+  newdf %<>% na.omit()
   
   if (!jatkuvuusanalyysi) {
     
@@ -113,14 +128,15 @@ source("ChowDiscontinuityAlgorithm.R")
     
     newdf %>%
       ungroup %>%
-      mutate(hakkuu = ifelse(newdf$to > as.POSIXct("2021-04-19"), "hakkuu", "ei hakkuuta")) %>% 
+      mutate(hakkuu = ifelse(newdf$to > as.POSIXct(lubridate::ymd(gsub("/" ,"-", arrivalDate))), "hakkuuilmoitus", "ei hakkuuilmoitusta")) %>% 
       ggplot(aes(x = as.POSIXct(to), y = as.numeric(NDVI_index), 
                  group=hakkuu, color=hakkuu)) +
       geom_point() +
       geom_smooth(method="lm") +
       xlab("Päivämäärä") + 
-      ylab("NDVI-indeksi") + 
-      ggtitle(title)
+      ylab(paste(method, "indeksi", sep = "-")) + 
+      ggtitle(title) + 
+      theme(legend.position="bottom")
     
   }
   
@@ -151,10 +167,16 @@ source("ChowDiscontinuityAlgorithm.R")
   plot(fs.ndvi)
   bp.ndvi <- breakpoints(newdf$NDVI_index ~ 1)
   
+  fs.ndvi$Fstats
+  
   fm0 <- lm(newdf$NDVI_index ~ 1)
   fm1 <- lm(newdf$NDVI_index ~ breakfactor(bp.ndvi, breaks = 1))
   plot(newdf$NDVI_index)
   lines(ts(fitted(fm0), start = 1), col = 3)
   lines(ts(fitted(fm1), start = 1), col = 4)
   lines(bp.ndvi)
+  abline(y= 60)
+  
+  print(google_coordinates1)
+  print(google_coordinates2)
   
