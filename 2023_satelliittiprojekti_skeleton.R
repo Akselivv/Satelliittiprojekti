@@ -9,7 +9,7 @@
 
 ##### SKELETON SCRIPT #####
 
-setwd("//home.org.aalto.fi/valivia1/data/Documents/GitHub/Satelliittiprojekti")
+setwd(".~/GitHub/Satelliittiprojekti")
 
 library(rjson)
 library(tidyverse)
