@@ -4,8 +4,8 @@ from requests_oauthlib import OAuth2Session
 import json
 
 # Your client credentials
-client_id = '5876fc78-d265-47e0-9be3-480215b785fc'
-client_secret = 'Qv:+#co:JreWlDIJ:qkODt}9yyRIT+{#Gw3;Z-T7'
+client_id = 'your-client-id'
+client_secret = 'your-client-secret'
 
 # Create a session
 client = BackendApplicationClient(client_id=client_id)
@@ -111,6 +111,3 @@ url = "https://services.sentinel-hub.com/api/v1/statistics"
 response = oauth.request("POST", url=url , headers=headers, json=stats_request)
 sh_statistics = response.json()
 print(sh_statistics)
-
-with open('data45.json', 'w', encoding='utf-8') as f:
-    json.dump(sh_statistics, f, ensure_ascii=False, indent=4)
